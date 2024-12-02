@@ -28,47 +28,18 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.iit.mapreduce.patterns.mostscoredplayer.MostScoredPlayer;
-import org.iit.mapreduce.patterns.mostscoredplayer.MostScoredPlayer.TheMostScoredPlayerMapper;
-import org.iit.mapreduce.patterns.mostscoredplayer.MostScoredPlayer.TheMostScoredPlayerReducer;
-
 import java.util.Map;
 import java.util.HashMap;
-
-
 import java.io.IOException;
-
-
-
 
 
 public class MostScoredPlayer {
 
-        private static int EVENTID = 0;
-        private static int EVENTNUM = 1;
+    // Saving necessary column IDs to variables 
         private static int GAME_ID = 2;
         private static int HOMEDESCRIPTION = 3;
-        private static int PCTIMESTRING = 4;
-        private static int PERIOD = 5;
-        private static int PLAYER1_ID = 6;
         private static int PLAYER1_NAME = 7;
-        private static int PLAYER1_TEAM_ABBREVIATION = 8;
-        private static int PLAYER1_TEAM_CITY = 9;
-        private static int PLAYER1_TEAM_ID = 10;
-        private static int PLAYER1_TEAM_NICKNAME = 11;
-        private static int PLAYER2_ID = 12;
         private static int PLAYER2_NAME = 13;
-        private static int PLAYER2_TEAM_ABBREVIATION = 14;
-        private static int PLAYER2_TEAM_CITY = 15;
-        private static int PLAYER2_TEAM_ID = 16;
-        private static int PLAYER2_TEAM_NICKNAME = 17;
-        private static int PLAYER3_ID = 18;
-        private static int PLAYER3_NAME = 19;
-        private static int PLAYER3_TEAM_ABBREVIATION = 20;
-        private static int PLAYER3_TEAM_CITY = 21;
-        private static int PLAYER3_TEAM_ID = 22;
-        private static int PLAYER3_TEAM_NICKNAME = 23;
-        private static int SCORE = 24;
-        private static int SCOREMARGIN = 25;
         private static int VISITORDESCRIPTION = 26;
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,7 +57,7 @@ public class MostScoredPlayer {
     
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             // Reading the data from the CSV file
-            String[] fields = value.toString().split(",");
+            String[] fields = (value.toString() +" ").split(",");
             
 
             // Ensure the row has enough columns
