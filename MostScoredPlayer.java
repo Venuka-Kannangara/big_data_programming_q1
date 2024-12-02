@@ -39,7 +39,6 @@ public class MostScoredPlayer {
         private static int GAME_ID = 2;
         private static int HOMEDESCRIPTION = 3;
         private static int PLAYER1_NAME = 7;
-        private static int PLAYER2_NAME = 13;
         private static int VISITORDESCRIPTION = 26;
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -95,7 +94,7 @@ public class MostScoredPlayer {
             // Check and handle the Visitor description (Player 2)
             if (!Description2.isEmpty() && Description2.contains("PTS")) {
                 // Store Player Name for player 2
-                Player_Name = fields[PLAYER2_NAME].trim();
+                Player_Name = fields[PLAYER1_NAME].trim();
 
 
                 // Extract the Score from the description for player 2
