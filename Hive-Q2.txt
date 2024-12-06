@@ -3,7 +3,7 @@ WITH RankedScores AS (
         GAME_ID,
         PERIOD,
         SCORE,
-        ROW_NUMBER() OVER (PARTITION BY GAME_ID, PERIOD ORDER BY PERIOD DESC, EVENTNUM DESC) AS ROW_NUM
+        ROW_NUMBER() OVER (PARTITION BY GAME_ID, PERIOD ORDER BY EVENTNUM DESC) AS ROW_NUM
     FROM game_events
     WHERE SCORE IS NOT NULL AND SCORE != ''
 ),
@@ -16,12 +16,20 @@ FilteredScores AS (
     FROM RankedScores
     WHERE ROW_NUM = 1
 ),
+QuarterScores AS (
+    SELECT
+        GAME_ID,
+        PERIOD,
+        TEAM_1_Score - COALESCE(LAG(TEAM_1_Score) OVER (PARTITION BY GAME_ID ORDER BY PERIOD), 0) AS Quarter_Team_1_Score,
+        TEAM_2_Score - COALESCE(LAG(TEAM_2_Score) OVER (PARTITION BY GAME_ID ORDER BY PERIOD), 0) AS Quarter_Team_2_Score
+    FROM FilteredScores
+),
 AccumulatedScores AS (
     SELECT
         PERIOD,
-        SUM(TEAM_1_Score + TEAM_2_Score) AS Total_Score,
+        SUM(Quarter_Team_1_Score + Quarter_Team_2_Score) AS Total_Score,
         COUNT(DISTINCT GAME_ID) AS Total_Games
-    FROM FilteredScores
+    FROM QuarterScores
     GROUP BY PERIOD
 ),
 AverageScores AS (
