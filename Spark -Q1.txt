@@ -1,0 +1,91 @@
+%spark.pyspark
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, regexp_extract, sum, countDistinct, lit
+from pyspark.sql.window import Window
+from pyspark.sql import functions as F
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("PlayerScoringAnalysis").getOrCreate()
+
+# File path to the CSV file
+file_path = "/opt/resources/dataset.csv"
+
+# Step 1: Read the file as raw text
+df_raw = spark.read.text(file_path)
+
+# Step 2: Skip the first row (if it is malformed data)
+first_row_value = df_raw.first()[0]
+df_no_first_row = df_raw.filter(df_raw.value != first_row_value)
+
+# Step 3: Extract header row
+header_row = df_no_first_row.take(1)[0][0].split(",")
+
+# Step 4: Convert remaining rows to a DataFrame
+df_with_header = df_no_first_row \
+    .filter(df_no_first_row.value != df_no_first_row.take(1)[0][0]) \
+    .rdd \
+    .map(lambda row: row[0].split(",")) \
+    .toDF(header_row)
+
+# Cast PLAYER IDs to integers and EVENTID to integers
+df_with_header = df_with_header.withColumn("PLAYER1_ID", col("PLAYER1_ID").cast("int")) \
+    .withColumn("PLAYER2_ID", col("PLAYER2_ID").cast("int")) \
+    .withColumn("PLAYER3_ID", col("PLAYER3_ID").cast("int")) \
+    .withColumn("EVENTID", col("EVENTID").cast("int"))
+
+# Step 5: Calculate total_number_of_players
+player_ids_df = df_with_header.select(
+    "PLAYER1_ID", "PLAYER2_ID", "PLAYER3_ID"
+).filter(
+    (col("PLAYER1_ID") != 0) | (col("PLAYER2_ID") != 0) | (col("PLAYER3_ID") != 0)
+)
+
+total_number_of_players = player_ids_df.select(
+    col("PLAYER1_ID").alias("PLAYER_ID")
+).union(
+    player_ids_df.select(col("PLAYER2_ID").alias("PLAYER_ID"))
+).union(
+    player_ids_df.select(col("PLAYER3_ID").alias("PLAYER_ID"))
+).filter(col("PLAYER_ID").isNotNull()).distinct().count()
+
+# Step 6: Define window specification for GAME_ID
+window_spec_asc = Window.partitionBy("GAME_ID").orderBy("EVENTID")
+
+# Step 7: Identify scoring events
+scoring_events_df = df_with_header.filter(
+    (col("HOMEDESCRIPTION").contains("PTS")) | (col("VISITORDESCRIPTION").contains("PTS"))
+)
+
+# Step 8: Extract scores and players, then sort by EVENTID in descending order
+scored_df = scoring_events_df \
+    .withColumn(
+        "SCORE",
+        when(col("HOMEDESCRIPTION").contains("PTS"),
+             regexp_extract(col("HOMEDESCRIPTION"), r"(\d+) PTS", 1))
+        .otherwise(regexp_extract(col("VISITORDESCRIPTION"), r"(\d+) PTS", 1))
+    .cast("int")
+    ) \
+    .withColumn("PLAYER_ID", col("PLAYER1_ID")) \
+    .orderBy(col("EVENTID").desc())  # Sorting by EVENTID in descending order
+
+# Step 9: Get the first occurrence of SCORE for each PLAYER_ID
+# Use .groupBy to get the first event per player
+first_score_df = scored_df.groupBy("GAME_ID", "PLAYER_ID").agg(
+    F.first("SCORE").alias("SCORE")  # Get the first SCORE after sorting by EVENTID
+)
+
+# Step 10: Filter players who scored 40 or more points
+player_scores_df = first_score_df.filter(col("SCORE") >= 40)
+
+# Step 10: Get distinct players who scored 40 or more points
+distinct_players_40_or_above = player_scores_df.select("PLAYER_ID").distinct()
+
+# Step 11: Calculate percentage
+distinct_players_40_or_above_count = distinct_players_40_or_above.count()
+percentage_40_or_more = (distinct_players_40_or_above_count / total_number_of_players) * 100
+
+# Output results
+print(f"Total Number of Players: {total_number_of_players}")
+print(f"Players with 40 or more points: {distinct_players_40_or_above_count}")
+print(f"Percentage of Players with 40 or more points: {percentage_40_or_more:.2f}%")

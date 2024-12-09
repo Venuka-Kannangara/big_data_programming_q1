@@ -1,0 +1,91 @@
+ docker run -it --name zeppelin -p 8089:8080 -v  "/mnt/d/MSC/Semester
+ 1/BigData_CourseWork/Q3/mapreduce-design-intro/hadoop-spark-dockercompose/resources:/opt/resources" apache/zeppelin:0.9.0
+
+##########################################################
+
+Then open http://localhost:8089/
+
+#################################################################################
+
+%spark.pyspark
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, row_number, desc
+from pyspark.sql.window import Window
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("Optimized Game Scores").getOrCreate()
+
+# File path to the CSV file
+file_path = "/opt/resources/dataset.csv"
+
+# Step 1: Read the file as raw text (skipping the first row if necessary)
+df_raw = spark.read.text(file_path)
+
+
+# Step 2: Skip the first row (if it is malformed data)
+first_row_value = df_raw.first()[0]
+df_no_first_row = df_raw.filter(df_raw.value != first_row_value)
+
+
+# Step 3: Extract header row
+header_row = df_no_first_row.take(1)[0][0].split(",")
+
+
+# Step 4: Convert remaining rows to a DataFrame
+df_with_header = df_no_first_row \
+    .filter(df_no_first_row.value != df_no_first_row.take(1)[0][0]) \
+    .rdd \
+    .map(lambda row: row[0].split(",")) \
+    .toDF(header_row)
+
+
+# Step 5: Extract visitor and home team names
+window_spec_asc = Window.partitionBy("GAME_ID").orderBy("EVENTID")
+window_spec_desc = Window.partitionBy("GAME_ID").orderBy(desc("EVENTID"))
+
+
+# Extract first scoring events for visitor teams
+visitor_team_df = df_with_header \
+    .filter(col("VISITORDESCRIPTION").contains("PTS")) \
+    .withColumn("row_num", row_number().over(window_spec_asc)) \
+    .filter(col("row_num") == 1) \
+    .select("GAME_ID", col("PLAYER1_TEAM_NICKNAME").alias("VISITOR_TEAM_NAME"))
+
+
+# Extract first scoring events for home teams
+home_team_df = df_with_header \
+    .filter(col("HOMEDESCRIPTION").contains("PTS")) \
+    .withColumn("row_num", row_number().over(window_spec_asc)) \
+    .filter(col("row_num") == 1) \
+    .select("GAME_ID", col("PLAYER1_TEAM_NICKNAME").alias("HOME_TEAM_NAME"))
+
+
+# Join visitor and home team names into a single DataFrame
+teams_df = visitor_team_df.join(home_team_df, on="GAME_ID", how="inner")
+
+
+# Identify final score margin where SCOREMARGIN is an integer
+final_margin_df = df_with_header \
+    .filter(col("SCOREMARGIN").rlike("^-?\\d+$")) \
+    .withColumn("row_num", row_number().over(window_spec_desc)) \
+    .filter(col("row_num") == 1) \
+    .select("GAME_ID", "SCOREMARGIN") \
+    .join(teams_df, on="GAME_ID")
+
+# Calculate final scores
+final_scores = final_margin_df \
+    .withColumn("LOSER", 
+               when(col("SCOREMARGIN").cast("int") < 0, col("VISITOR_TEAM_NAME"))
+               .when(col("SCOREMARGIN").cast("int") > 0, col("HOME_TEAM_NAME"))
+    ) \
+    .groupBy("LOSER") \
+    .count()
+
+# Show the final scores
+print("Final Scores:")
+final_scores.show(n=final_scores.count(), truncate=False)
+
+
+#################################################################################
+
